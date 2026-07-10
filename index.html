@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;700;900&display=swap" rel="stylesheet">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
   --ink:#1c2b3a;
@@ -206,18 +208,19 @@ input[type=search]:focus-visible{outline:none}
 /* PDF出力（印刷シート） */
 .stock-actions{display:flex;justify-content:flex-end;padding-top:12px}
 #pdfBtn{font-family:var(--sans);font-size:.8rem;color:#fff;background:var(--indigo);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
-#printSheet{display:none}
+#printSheet{display:none;background:#fff;color:#000;font-family:var(--sans)}
+#printSheet h1{font-family:var(--mincho);font-size:16pt;letter-spacing:.15em;margin-bottom:2mm}
+#printSheet .pdate{font-size:9pt;text-align:right;margin-bottom:4mm}
+#printSheet h2{font-family:var(--mincho);font-size:12pt;letter-spacing:.1em;margin:5mm 0 2mm;border-left:3mm solid #000;padding-left:2mm}
+#printSheet table{width:100%;border-collapse:collapse;font-size:10pt}
+#printSheet th,#printSheet td{border:1px solid #333;padding:1.5mm 2mm;text-align:left;vertical-align:top}
+#printSheet th{font-weight:700;background:#eee;white-space:nowrap}
+#printSheet td.po,#printSheet td.pn,#printSheet td.pb{white-space:nowrap}
+#printSheet td.pn{font-family:var(--mincho);font-weight:700}
+#printSheet.capture{display:block;position:fixed;left:-10000px;top:0;width:794px;padding:30px;z-index:-1}
 @media print{
   .wrap{display:none}
-  #printSheet{display:block;color:#000;font-family:var(--sans)}
-  #printSheet h1{font-family:var(--mincho);font-size:16pt;letter-spacing:.15em;margin-bottom:2mm}
-  #printSheet .pdate{font-size:9pt;text-align:right;margin-bottom:4mm}
-  #printSheet h2{font-family:var(--mincho);font-size:12pt;letter-spacing:.1em;margin:5mm 0 2mm;border-left:3mm solid #000;padding-left:2mm}
-  #printSheet table{width:100%;border-collapse:collapse;font-size:10pt}
-  #printSheet th,#printSheet td{border:1px solid #333;padding:1.5mm 2mm;text-align:left;vertical-align:top}
-  #printSheet th{font-weight:700;background:#eee;white-space:nowrap}
-  #printSheet td.po,#printSheet td.pn,#printSheet td.pb{white-space:nowrap}
-  #printSheet td.pn{font-family:var(--mincho);font-weight:700}
+  #printSheet{display:block}
 }
 
 .empty{
@@ -410,7 +413,7 @@ function careerText(p){
   const parts = p.roles.map(r => r.g + ' ' + r.r + ' ' + r.t + '期');
   return parts.join('、') + (parts.length ? '（通算' + p.total + '期）' : '役員歴なし');
 }
-function printStock(){
+function buildSheet(){
   const d = new Date();
   const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
   document.getElementById('printSheet').innerHTML =
@@ -422,7 +425,34 @@ function printStock(){
         return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(e.b) + '</td><td>' + esc(careerText(p)) + '</td></tr>';
       }).join('') + '</table>'
     ).join('');
-  window.print();
+}
+async function printStock(){
+  buildSheet();
+  if(!window.html2canvas || !window.jspdf){ window.print(); return; }
+  const ps = document.getElementById('printSheet');
+  const btn = document.getElementById('pdfBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '作成中…'; }
+  ps.classList.add('capture');
+  try{
+    const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
+    const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+    const M = 10, imgW = 210 - M*2, pageH = 297 - M*2;
+    const imgH = canvas.height * imgW / canvas.width;
+    const img = canvas.toDataURL('image/jpeg', 0.92);
+    let pos = 0, page = 0;
+    while(pos < imgH){
+      if(page > 0) pdf.addPage();
+      pdf.addImage(img, 'JPEG', M, M - pos, imgW, imgH);
+      pos += pageH; page++;
+    }
+    const d = new Date();
+    pdf.save('次期役員案_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf');
+  }catch(err){
+    window.print();
+  }finally{
+    ps.classList.remove('capture');
+    if(btn){ btn.disabled = false; btn.textContent = 'PDFにする'; }
+  }
 }
 stockBtn.addEventListener('click', () => {
   stockPanel.hidden = !stockPanel.hidden;
