@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;700;900&display=swap" rel="stylesheet">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --ink:#1c2b3a;
@@ -440,68 +441,92 @@ function careerText(p){
     return org + r.r + toKanji(r.t) + '期';
   }).join('　');
 }
-function buildSheet(){
-  const d = new Date();
-  const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
-  document.getElementById('printSheet').innerHTML =
-    '<h1>次期役員（案）</h1><div class="pdate">' + dateStr + '　岸和田市職労</div>' +
-    stockGroups().map(([org, entries]) =>
-      '<h2>' + esc(org) + '</h2><table><tr><th>役職</th><th>名前</th><th>職場</th><th>経歴</th></tr>' +
-      entries.map(([e]) => {
-        const p = PEOPLE[e.i];
-        return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(e.b) + '</td><td>' + esc(careerText(p)) + '</td></tr>';
-      }).join('') + '</table>'
-    ).join('');
-}
-function btnMsg(btn, msg, keep){
+function btnMsg(btn, msg){
   if(!btn) return;
   btn.textContent = msg;
-  if(!keep) setTimeout(() => { btn.disabled = false; btn.textContent = 'PDFにする'; }, 4000);
+  setTimeout(() => { btn.disabled = false; btn.textContent = 'PDFにする'; }, 3000);
+}
+let FONT_B64 = null;
+async function loadFont(){
+  if(FONT_B64) return FONT_B64;
+  const buf = await (await fetch('ipaexg.ttf')).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for(let i = 0; i < bytes.length; i += 0x8000){
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  FONT_B64 = btoa(bin);
+  return FONT_B64;
+}
+async function makeJPDF(format){
+  const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: format || 'a4'});
+  pdf.addFileToVFS('ipaexg.ttf', await loadFont());
+  pdf.addFont('ipaexg.ttf', 'ipaexg', 'normal');
+  pdf.setFont('ipaexg');
+  return pdf;
+}
+async function deliverPDF(pdf, fname, title, btn, label){
+  const blob = pdf.output('blob');
+  if(navigator.canShare){
+    const file = new File([blob], fname, {type: 'application/pdf'});
+    if(navigator.canShare({files: [file]})){
+      try{
+        await navigator.share({files: [file], title});
+        return;
+      }catch(shareErr){
+        if(shareErr.name === 'AbortError') return;
+      }
+    }
+  }
+  pdf.save(fname);
+}
+function stampName(base){
+  const d = new Date();
+  return base + '_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
 }
 async function printStock(){
-  buildSheet();
   const btn = document.getElementById('pdfBtn');
-  if(!window.html2canvas || !window.jspdf){
+  if(!window.jspdf || !window.jspdf.jsPDF.API.autoTable){
     btnMsg(btn, '部品の読込失敗。電波確認して再読込を');
     return;
   }
-  const ps = document.getElementById('printSheet');
   if(btn){ btn.disabled = true; btn.textContent = '作成中…'; }
-  ps.classList.add('capture');
   try{
-    const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
-    const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-    const M = 10, imgW = 210 - M*2, pageH = 297 - M*2;
-    const imgH = canvas.height * imgW / canvas.width;
-    const img = canvas.toDataURL('image/jpeg', 0.92);
-    let pos = 0, page = 0;
-    while(pos < imgH){
-      if(page > 0) pdf.addPage();
-      pdf.addImage(img, 'JPEG', M, M - pos, imgW, imgH);
-      pos += pageH; page++;
-    }
+    const pdf = await makeJPDF('a4');
     const d = new Date();
-    const fname = '次期役員案_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
-    const blob = pdf.output('blob');
-    // スマホ: 共有シート優先（保存/印刷/送信を選べる）
-    if(navigator.canShare){
-      const file = new File([blob], fname, {type: 'application/pdf'});
-      if(navigator.canShare({files: [file]})){
-        try{
-          await navigator.share({files: [file], title: '次期役員（案）'});
-          btnMsg(btn, 'できた');
-          return;
-        }catch(shareErr){
-          if(shareErr.name === 'AbortError'){ btnMsg(btn, 'PDFにする'); return; }
-        }
-      }
+    const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
+    pdf.setFontSize(16);
+    pdf.text('次期役員（案）', 14, 18);
+    pdf.setFontSize(9);
+    pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
+    let y = 26;
+    for(const [org, entries] of stockGroups()){
+      if(y > 250){ pdf.addPage(); y = 20; }
+      pdf.setFontSize(12);
+      pdf.text('■ ' + org, 14, y);
+      y += 3;
+      const body = entries.map(([e]) => {
+        const p = PEOPLE[e.i];
+        return [e.role, e.name, p.w || p.b, careerText(p)];
+      });
+      pdf.autoTable({
+        startY: y,
+        head: [['役職', '名前', '職場', '経歴']],
+        body,
+        styles: {font: 'ipaexg', fontStyle: 'normal', fontSize: 9.5, cellPadding: 1.8, lineColor: [60,60,60], lineWidth: 0.25, textColor: [0,0,0]},
+        headStyles: {fillColor: [235,235,235], textColor: [0,0,0], fontStyle: 'normal'},
+        columnStyles: {0: {cellWidth: 26}, 1: {cellWidth: 32}, 2: {cellWidth: 38}},
+        margin: {left: 14, right: 14},
+        theme: 'grid'
+      });
+      y = pdf.lastAutoTable.finalY + 10;
     }
-    pdf.save(fname);
-    btnMsg(btn, 'できた（ダウンロード）');
+    await deliverPDF(pdf, stampName('次期役員案'), '次期役員（案）', btn);
+    btnMsg(btn, 'できた');
   }catch(err){
     btnMsg(btn, '失敗: ' + (err.message || err).toString().slice(0, 40));
   }finally{
-    ps.classList.remove('capture');
+    if(btn) btn.disabled = false;
   }
 }
 
