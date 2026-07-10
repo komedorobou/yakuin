@@ -367,7 +367,7 @@ function render(){
     const pi = PEOPLE.indexOf(p);
     return '<div class="row' + (autoOpen ? ' open' : '') + '" data-i="' + pi + '">' +
       '<button class="row-head" aria-expanded="' + autoOpen + '">' +
-        '<span class="kana">' + esc(p.k) + '</span>' +
+        '<span class="kana">' + esc(p.k.slice(0, 2)) + '</span>' +
         '<span class="name">' + highlight(disp, q) + '</span>' +
         '<span class="shibu">' + esc(p.b) + '</span>' +
         '<span class="terms"><b>' + p.total + '</b> 期</span>' +
