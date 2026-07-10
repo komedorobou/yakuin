@@ -203,6 +203,9 @@ input[type=search]:focus-visible{outline:none}
 #stockBtn.has{background:var(--indigo);color:#fff}
 .stock-panel{background:var(--card);border:2px solid var(--indigo);border-radius:8px;padding:6px 16px 16px;margin-bottom:12px}
 .stock-line{display:flex;align-items:center;gap:8px;padding:4px 0 4px 4px;font-size:.92rem;border-bottom:1px dotted var(--line)}
+#stockPanel .org.folded .stock-line{display:none}
+#stockPanel .org-fold{display:flex;align-items:center;gap:6px;width:100%;background:none;font:inherit;cursor:pointer;text-align:left}
+.fold-mark{font-size:.6rem;color:var(--indigo)}
 .stock-line .lbl{flex:1;min-width:0}
 .selc{flex:none;width:22px;height:22px;border:2px solid var(--indigo);border-radius:50%;background:var(--card);cursor:pointer;color:transparent;font-size:.85rem;line-height:1;padding:0}
 .selc.on{background:var(--indigo);color:#fff}
@@ -518,6 +521,7 @@ function stockGroups(){
 let chooseMode = null;
 let orgSel = {};
 let editSi = null;
+const foldedOrgs = new Set();
 function renderStockPanel(){
   if(!STOCK.length){
     stockPanel.innerHTML = '<div class="stock-empty">まだ空です。名前を開いて「＋ 次期役員に追加」で選ぶとここに溜まります。</div>';
@@ -535,7 +539,7 @@ function renderStockPanel(){
     actions = '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
   }
   stockPanel.innerHTML = stockGroups().map(([org, entries]) =>
-    '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
+    '<div class="org' + (foldedOrgs.has(org) ? ' folded' : '') + '"><button class="org-name org-fold" data-org="' + esc(org) + '"><span class="fold-mark">' + (foldedOrgs.has(org) ? '▶' : '▼') + '</span>' + esc(org) + '（' + entries.length + '名）</button>' +
     entries.map(([e, si]) =>
       si === editSi
       ? '<div class="stock-line edit"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '" placeholder="名前">　<input class="wkedit" data-si="' + si + '" value="' + esc(workOf(e)) + '" placeholder="職場"><textarea class="credit" data-si="' + si + '" placeholder="経歴" rows="3">' + esc(careerOf(e)) + '</textarea></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
@@ -728,6 +732,13 @@ stockPanel.addEventListener('click', e => {
     renderStockPanel();
     if(!groups.length) return;
     if(mode === 'ballot') printBallots(groups); else printStock(groups);
+    return;
+  }
+  const fo = e.target.closest('.org-fold');
+  if(fo){
+    const o = fo.dataset.org;
+    if(foldedOrgs.has(o)) foldedOrgs.delete(o); else foldedOrgs.add(o);
+    renderStockPanel();
     return;
   }
   const ed = e.target.closest('.ed');
