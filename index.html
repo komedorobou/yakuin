@@ -537,7 +537,7 @@ function jchars(s){
   return '<div class="jrow">' + chars.map(c => '<span>' + esc(c) + '</span>').join('') + '</div>';
 }
 function ballotHTML(org, entries){
-  const year = new Date().getFullYear();
+  const year = 2027;
   const orgName = org === '中央' ? '中央役員候補' : org + '役員候補';
   let rows = '';
   let prevRole = null;
@@ -559,7 +559,7 @@ function ballotHTML(org, entries){
     '<th class="cWork">' + jchars('職場名') + '</th>' +
     '<th class="cVote">' + jchars('投票欄') + '</th></tr>' + rows + '</table>' +
     '<div class="bnotes">信任は○、不信任は×を投票欄にそれぞれ記入してください。<br>無記入は信任とみなします。' +
-    '<div class="bsign">' + year + '年　月　日～　日実施<br>岸和田市職員労働組合選挙管理委員会<br>委員長　　　　　　　　　　</div></div></div>';
+    '<div class="bsign">2026年7月13日～17日実施<br>岸和田市職員労働組合選挙管理委員会<br>委員長　　西山　純平</div></div></div>';
 }
 async function printBallots(){
   const btn = document.getElementById('ballotBtn');
