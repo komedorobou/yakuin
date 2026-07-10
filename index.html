@@ -189,6 +189,11 @@ input[type=search]:focus-visible{outline:none}
 .chip.cancel{color:var(--ink-soft);border-color:var(--line)}
 .next-badge{display:inline-flex;align-items:center;gap:4px;background:var(--indigo);color:#fff;font-size:.75rem;border-radius:4px;padding:3px 6px 3px 9px;letter-spacing:.05em}
 .bx{background:none;border:0;color:inherit;cursor:pointer;font-size:.95rem;line-height:1;padding:0 2px}
+/* 支部フィルタ */
+.shibu-bar{display:flex;flex-wrap:wrap;gap:6px;padding:10px 0 0}
+.sf{font-family:var(--sans);font-size:.78rem;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:4px 12px;cursor:pointer;letter-spacing:.05em}
+.sf.on{background:var(--indigo);border-color:var(--indigo);color:#fff}
+
 .countbar{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 0}
 .countbar .count{padding:0}
 #stockBtn{font-family:var(--sans);font-size:.75rem;color:var(--indigo);background:none;border:1px solid var(--indigo);border-radius:4px;padding:3px 10px;cursor:pointer;letter-spacing:.05em}
@@ -235,6 +240,16 @@ footer{
   <div class="searchbox">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
     <input type="search" id="q" placeholder="名前（漢字・ひらがな）" autocomplete="off" autofocus>
+  </div>
+  <div class="shibu-bar" id="shibuBar">
+    <button class="sf on" data-b="">全部</button>
+    <button class="sf" data-b="本庁">本庁</button>
+    <button class="sf" data-b="学校">学校</button>
+    <button class="sf" data-b="水道">水道</button>
+    <button class="sf" data-b="現業">現業</button>
+    <button class="sf" data-b="病院">病院</button>
+    <button class="sf" data-b="保育所">保育所</button>
+    <button class="sf" data-b="関連評">関連評</button>
   </div>
   <div class="countbar"><div class="count" id="count"></div><button id="stockBtn">次期役員（0）</button></div>
 </div>
@@ -298,10 +313,11 @@ function detailHTML(p, i){
   return h;
 }
 
+let shibuFilter = '';
 function render(){
   const q = qEl.value.trim();
-  const hits = PEOPLE.filter(p => match(p, q));
-  countEl.textContent = q ? `該当 ${hits.length} 名 / 全 ${PEOPLE.length} 名` : `全 ${PEOPLE.length} 名`;
+  const hits = PEOPLE.filter(p => match(p, q) && (!shibuFilter || p.b === shibuFilter));
+  countEl.textContent = (q || shibuFilter) ? `該当 ${hits.length} 名 / 全 ${PEOPLE.length} 名` : `全 ${PEOPLE.length} 名`;
   if(hits.length === 0){
     listEl.innerHTML = '<div class="empty"><div class="big">該当なし</div>漢字の姓名か、ひらがなで入力してください</div>';
     return;
@@ -419,6 +435,14 @@ listEl.addEventListener('click', e => {
   }
   row.classList.toggle('open', opening);
   head.setAttribute('aria-expanded', opening);
+});
+
+document.getElementById('shibuBar').addEventListener('click', e => {
+  const sf = e.target.closest('.sf');
+  if(!sf) return;
+  shibuFilter = sf.dataset.b;
+  document.querySelectorAll('#shibuBar .sf').forEach(b => b.classList.toggle('on', b === sf));
+  render();
 });
 
 qEl.addEventListener('input', render);
