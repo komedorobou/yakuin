@@ -218,13 +218,15 @@ input[type=search]:focus-visible{outline:none}
 .sel-tools .orgc.on{background:#eef3f9}
 #goBtn{background:var(--indigo);color:#fff;font-weight:700}
 #cancelSel{color:var(--ink-soft);border-color:var(--line)}
-.ed{background:none;border:0;color:var(--indigo);cursor:pointer;font-size:1rem;padding:0 6px;flex:none}
+.ed,.vaced{background:none;border:0;color:var(--indigo);cursor:pointer;font-size:1rem;padding:0 6px;flex:none}
 .nmedit,.wkedit{font:inherit;font-size:.9rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;width:9em;max-width:44%}
+.stock-line.vac .lbl{color:var(--shu);font-size:.85rem}
+.vacedit{font:inherit;font-size:.85rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;flex:1;min-width:0}
 .credit{font:inherit;font-size:.85rem;border:1px solid var(--indigo);border-radius:4px;padding:4px 8px;width:100%;margin-top:6px;resize:vertical}
 .stock-line.edit .lbl{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.edok,.edng{font-family:var(--sans);font-size:.72rem;border-radius:4px;padding:3px 10px;cursor:pointer;flex:none}
-.edok{background:var(--indigo);color:#fff;border:1px solid var(--indigo)}
-.edng{background:var(--card);color:var(--ink-soft);border:1px solid var(--line)}
+.edok,.edng,.vacok,.vacng{font-family:var(--sans);font-size:.72rem;border-radius:4px;padding:3px 10px;cursor:pointer;flex:none}
+.edok,.vacok{background:var(--indigo);color:#fff;border:1px solid var(--indigo)}
+.edng,.vacng{background:var(--card);color:var(--ink-soft);border:1px solid var(--line)}
 
 /* プレビュー */
 .pv-overlay{position:fixed;inset:0;background:rgba(28,43,58,.65);z-index:100;overflow:auto;padding:14px}
@@ -268,6 +270,7 @@ input[type=search]:focus-visible{outline:none}
 .psheet .btable .cVote{width:15%}
 .psheet .jrow{display:flex;justify-content:space-between}
 .psheet .jone{display:block;text-align:center}
+.psheet .bvac{margin-top:14px;font-size:17px;font-weight:700}
 .psheet .bnotes{margin-top:auto;padding-top:24px;font-size:15px;line-height:1.9}
 .psheet .bsign{text-align:right;margin-top:10px}
 @media print{
@@ -511,7 +514,36 @@ function refreshStockUI(){
   stockBtn.classList.toggle('has', STOCK.length > 0);
   renderStockPanel();
 }
-const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'会計監査':5,'部長':0,'副部長':1,'常任幹事':4};
+const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'会計監査':5,'特別執行委員':6,'部長':0,'副部長':1,'常任幹事':4};
+// 2027年度 役員定数（告示第1号 2026.6.15）
+const TEISU = {
+  '中央':      {'執行委員長':1,'副執行委員長':4,'書記長':1,'書記次長':2,'執行委員':6,'会計監査':2,'特別執行委員':1},
+  '本庁支部':  {'執行委員長':1,'副執行委員長':2,'書記長':1,'書記次長':1,'執行委員':11,'会計監査':2},
+  '水道支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':3,'会計監査':2},
+  '現業支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':4,'会計監査':2},
+  '学校支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':4,'会計監査':2},
+  '病院支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':9,'会計監査':2},
+  '保育所支部':{'執行委員長':1,'副執行委員長':2,'書記長':1,'書記次長':1,'執行委員':9,'会計監査':2},
+  '青年部':    {'部長':1,'副部長':1,'書記長':1,'書記次長':1,'常任幹事':4}
+};
+function vacancyText(org, entries){
+  const t = TEISU[org];
+  if(!t) return '';
+  const cnt = {};
+  entries.forEach(([e]) => { cnt[e.role] = (cnt[e.role] || 0) + 1; });
+  const parts = [];
+  for(const [role, n] of Object.entries(t)){
+    const lack = n - (cnt[role] || 0);
+    if(lack > 0) parts.push(role + lack + '名');
+  }
+  return parts.length ? '欠員：' + parts.join('、') : '';
+}
+// 欠員表示の手修正（空にすると自動計算に戻る）
+let VACOV = {};
+try{ VACOV = JSON.parse(localStorage.getItem('yakuin_vac') || '{}'); }catch(err){}
+function saveVac(){ localStorage.setItem('yakuin_vac', JSON.stringify(VACOV)); }
+function vacDisplay(org, entries){ return VACOV[org] || vacancyText(org, entries); }
+let editVacOrg = null;
 function orgOrder(o){ return o === '中央' ? 0 : o === '青年部' ? 2 : 1; }
 function stockGroups(){
   const orgs = [...new Set(STOCK.map(e => e.org))].sort((a,b) => orgOrder(a) - orgOrder(b));
@@ -540,6 +572,9 @@ function renderStockPanel(){
   }
   stockPanel.innerHTML = stockGroups().map(([org, entries]) =>
     '<div class="org' + (foldedOrgs.has(org) ? ' folded' : '') + '"><button class="org-name org-fold" data-org="' + esc(org) + '"><span class="fold-mark">' + (foldedOrgs.has(org) ? '▶' : '▼') + '</span>' + esc(org) + '（' + entries.length + '名）</button>' +
+    (org === editVacOrg
+      ? '<div class="stock-line edit vac"><span class="lbl">欠員表示　<input class="vacedit" data-org="' + esc(org) + '" value="' + esc(vacDisplay(org, entries)) + '" placeholder="空にすると自動計算に戻る"></span><button class="vacok" data-org="' + esc(org) + '">保存</button><button class="vacng">やめる</button></div>'
+      : '<div class="stock-line vac"><span class="lbl">' + esc(vacDisplay(org, entries) || '欠員なし') + (VACOV[org] ? '（手修正）' : '') + '</span><button class="vaced" data-org="' + esc(org) + '" aria-label="修正">✎</button></div>') +
     entries.map(([e, si]) =>
       si === editSi
       ? '<div class="stock-line edit"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '" placeholder="名前">　<input class="wkedit" data-si="' + si + '" value="' + esc(workOf(e)) + '" placeholder="職場"><textarea class="credit" data-si="' + si + '" placeholder="経歴" rows="3">' + esc(careerOf(e)) + '</textarea></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
@@ -671,6 +706,7 @@ function ballotHTML(org, entries){
     '<th class="cName">' + jchars('立候補者名') + '</th>' +
     '<th class="cWork">' + jchars('職場名') + '</th>' +
     '<th class="cVote">' + jchars('投票欄') + '</th></tr>' + rows + '</table>' +
+    (vacDisplay(org, entries) ? '<div class="bvac">' + esc(vacDisplay(org, entries)) + '</div>' : '') +
     '<div class="bnotes">信任は○、不信任は×を投票欄にそれぞれ記入してください。<br>無記入は信任とみなします。' +
     '<div class="bsign">2026年7月13日～17日実施<br>岸和田市職員労働組合選挙管理委員会<br>委員長　　西山　純平</div></div></div>';
 }
@@ -740,6 +776,18 @@ stockPanel.addEventListener('click', e => {
     if(foldedOrgs.has(o)) foldedOrgs.delete(o); else foldedOrgs.add(o);
     renderStockPanel();
     return;
+  }
+  const vc = e.target.closest('.vaced');
+  if(vc){ editVacOrg = vc.dataset.org; renderStockPanel(); const vi = stockPanel.querySelector('.vacedit'); if(vi){ vi.focus(); vi.select(); } return; }
+  if(e.target.closest('.vacng')){ editVacOrg = null; renderStockPanel(); return; }
+  const vok = e.target.closest('.vacok');
+  if(vok){
+    const org = vok.dataset.org;
+    const vi = stockPanel.querySelector('.vacedit');
+    const v = vi ? vi.value.trim() : '';
+    const auto = vacancyText(org, (stockGroups().find(([o]) => o === org) || [null, []])[1]);
+    if(!v || v === auto) delete VACOV[org]; else VACOV[org] = v;
+    saveVac(); editVacOrg = null; renderStockPanel(); return;
   }
   const ed = e.target.closest('.ed');
   if(ed){ editSi = +ed.dataset.si; renderStockPanel(); const inp = stockPanel.querySelector('.nmedit'); if(inp){ inp.focus(); inp.select(); } return; }
@@ -834,7 +882,7 @@ listEl.addEventListener('click', e => {
   if(oc){
     const box = oc.closest('.next-box');
     const org = oc.dataset.org;
-    const roles = org === '青年部' ? SEINEN_ROLES : ROLES;
+    const roles = org === '青年部' ? SEINEN_ROLES : org === '中央' ? ROLES.concat('特別執行委員') : ROLES;
     box.innerHTML = '<span class="pick-label">' + esc(org) + '：</span>' +
       roles.map(r => '<button class="chip role-chip" data-org="' + esc(org) + '" data-role="' + esc(r) + '">' + esc(r) + '</button>').join('') +
       '<button class="chip cancel">やめる</button>';
