@@ -209,6 +209,12 @@ input[type=search]:focus-visible{outline:none}
 .sel-tools{display:flex;gap:8px;align-items:center;padding:12px 0 4px}
 .sel-tools .cnt{font-size:.72rem;color:var(--ink-soft);margin-left:auto}
 .sel-tools button{font-family:var(--sans);font-size:.75rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:3px 12px;cursor:pointer}
+.sel-tools.orgs{flex-wrap:wrap}
+.sel-tools .orgc{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;padding:6px 12px}
+.sel-tools .orgc .selc{width:18px;height:18px;border-width:2px;pointer-events:none}
+.sel-tools .orgc.on{background:#eef3f9}
+#goBtn{background:var(--indigo);color:#fff;font-weight:700;margin-left:auto}
+#cancelSel{color:var(--ink-soft);border-color:var(--line)}
 .stock-line .bx{color:var(--shu)}
 .stock-empty{padding:14px 4px 8px;font-size:.8rem;color:var(--ink-soft)}
 
@@ -415,29 +421,35 @@ function refreshStockUI(){
 }
 const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'会計監査':5,'部長':0,'副部長':1,'常任幹事':4};
 function orgOrder(o){ return o === '中央' ? 0 : o === '青年部' ? 2 : 1; }
-function selectedGroups(){
-  return stockGroups()
-    .map(([org, entries]) => [org, entries.filter(([e]) => e.sel !== false)])
-    .filter(([org, entries]) => entries.length);
-}
 function stockGroups(){
   const orgs = [...new Set(STOCK.map(e => e.org))].sort((a,b) => orgOrder(a) - orgOrder(b));
   return orgs.map(org => [org, STOCK.map((e, si) => [e, si]).filter(([e]) => e.org === org)
     .sort(([a],[b]) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9))]);
 }
+let chooseMode = null;
+let orgSel = {};
 function renderStockPanel(){
   if(!STOCK.length){
     stockPanel.innerHTML = '<div class="stock-empty">まだ空です。名前を開いて「＋ 次期役員に追加」で選ぶとここに溜まります。</div>';
     return;
   }
-  const selCount = STOCK.filter(e => e.sel !== false).length;
-  stockPanel.innerHTML = '<div class="sel-tools"><button id="selAll">全部</button><button id="selNone">全部解除</button><span class="cnt">' + selCount + '/' + STOCK.length + ' 選択中</span></div>' +
-  stockGroups().map(([org, entries]) =>
+  let actions;
+  if(chooseMode){
+    const label = chooseMode === 'ballot' ? '投票用紙' : '役員案PDF';
+    actions = '<div class="sel-tools"><span class="pick-label">' + label + '：どれを出す？</span></div>' +
+      '<div class="sel-tools orgs">' + stockGroups().map(([org]) =>
+        '<button class="orgc-line orgc' + (orgSel[org] ? ' on' : '') + '" data-org="' + esc(org) + '"><span class="selc' + (orgSel[org] ? ' on' : '') + '">✓</span>' + esc(org) + '</button>'
+      ).join('') + '</div>' +
+      '<div class="sel-tools"><button id="selAll">全部</button><button id="selNone">全部解除</button><span class="cnt"></span><button id="goBtn">作成する</button><button id="cancelSel">やめる</button></div>';
+  } else {
+    actions = '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
+  }
+  stockPanel.innerHTML = stockGroups().map(([org, entries]) =>
     '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
     entries.map(([e, si]) =>
-      '<div class="stock-line"><button class="selc' + (e.sel !== false ? ' on' : '') + '" data-si="' + si + '" aria-label="選択">✓</button><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
+      '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
-  ).join('') + '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
+  ).join('') + actions;
 }
 
 function toKanji(n){
@@ -496,7 +508,7 @@ function stampName(base, org){
   const d = new Date();
   return base + (org ? '_' + org : '') + '_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
 }
-async function printStock(){
+async function printStock(groups){
   const btn = document.getElementById('pdfBtn');
   if(!window.jspdf || !window.jspdf.jsPDF.API.autoTable){
     btnMsg(btn, '部品の読込失敗。電波確認して再読込を');
@@ -507,9 +519,7 @@ async function printStock(){
     const d = new Date();
     const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
     const items = [];
-    const selGroups = selectedGroups();
-    if(!selGroups.length){ btnMsg(btn, '選択が0人。○にチェックを'); return; }
-    for(const [org, entries] of selGroups){
+    for(const [org, entries] of groups){
       const pdf = await makeJPDF('a4');
       pdf.setFontSize(16);
       pdf.text('次期役員（案）　' + org, 14, 18);
@@ -571,7 +581,7 @@ function ballotHTML(org, entries){
     '<div class="bnotes">信任は○、不信任は×を投票欄にそれぞれ記入してください。<br>無記入は信任とみなします。' +
     '<div class="bsign">2026年7月13日～17日実施<br>岸和田市職員労働組合選挙管理委員会<br>委員長　　西山　純平</div></div></div>';
 }
-async function printBallots(){
+async function printBallots(groups){
   const btn = document.getElementById('ballotBtn');
   if(!window.html2canvas || !window.jspdf){
     if(btn){ btn.textContent = '部品の読込失敗。再読込を'; setTimeout(() => { btn.textContent = '投票用紙PDF'; }, 4000); }
@@ -582,9 +592,7 @@ async function printBallots(){
   ps.classList.add('capture', 'ballot');
   try{
     const items = [];
-    const selGroups2 = selectedGroups();
-    if(!selGroups2.length){ if(btn){ btn.textContent = '選択が0人。○にチェックを'; setTimeout(() => { btn.disabled = false; btn.textContent = '投票用紙PDF'; }, 3000); } return; }
-    for(const [org, entries] of selGroups2){
+    for(const [org, entries] of groups){
       ps.innerHTML = ballotHTML(org, entries);
       const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
       const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: [182, 257]});
@@ -607,13 +615,29 @@ stockBtn.addEventListener('click', () => {
   stockPanel.hidden = !stockPanel.hidden;
   renderStockPanel();
 });
+function openChooser(mode){
+  chooseMode = mode;
+  orgSel = {};
+  stockGroups().forEach(([org]) => { orgSel[org] = true; });
+  renderStockPanel();
+}
 stockPanel.addEventListener('click', e => {
-  if(e.target.closest('#pdfBtn')){ printStock(); return; }
-  if(e.target.closest('#ballotBtn')){ printBallots(); return; }
-  if(e.target.closest('#selAll')){ STOCK.forEach(x => x.sel = true); saveStock(); renderStockPanel(); return; }
-  if(e.target.closest('#selNone')){ STOCK.forEach(x => x.sel = false); saveStock(); renderStockPanel(); return; }
-  const sc = e.target.closest('.selc');
-  if(sc){ const x = STOCK[+sc.dataset.si]; x.sel = (x.sel === false); saveStock(); renderStockPanel(); return; }
+  if(e.target.closest('#pdfBtn')){ openChooser('list'); return; }
+  if(e.target.closest('#ballotBtn')){ openChooser('ballot'); return; }
+  if(e.target.closest('#selAll')){ Object.keys(orgSel).forEach(o => orgSel[o] = true); renderStockPanel(); return; }
+  if(e.target.closest('#selNone')){ Object.keys(orgSel).forEach(o => orgSel[o] = false); renderStockPanel(); return; }
+  if(e.target.closest('#cancelSel')){ chooseMode = null; renderStockPanel(); return; }
+  const oc = e.target.closest('.orgc');
+  if(oc){ orgSel[oc.dataset.org] = !orgSel[oc.dataset.org]; renderStockPanel(); return; }
+  if(e.target.closest('#goBtn')){
+    const groups = stockGroups().filter(([org]) => orgSel[org]);
+    const mode = chooseMode;
+    chooseMode = null;
+    renderStockPanel();
+    if(!groups.length) return;
+    if(mode === 'ballot') printBallots(groups); else printStock(groups);
+    return;
+  }
   const bx = e.target.closest('.bx');
   if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
 });
