@@ -215,6 +215,11 @@ input[type=search]:focus-visible{outline:none}
 .sel-tools .orgc.on{background:#eef3f9}
 #goBtn{background:var(--indigo);color:#fff;font-weight:700;margin-left:auto}
 #cancelSel{color:var(--ink-soft);border-color:var(--line)}
+.ed{background:none;border:0;color:var(--indigo);cursor:pointer;font-size:1rem;padding:0 6px;flex:none}
+.nmedit{font:inherit;font-size:.95rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;width:11em;max-width:60%}
+.edok,.edng{font-family:var(--sans);font-size:.72rem;border-radius:4px;padding:3px 10px;cursor:pointer;flex:none}
+.edok{background:var(--indigo);color:#fff;border:1px solid var(--indigo)}
+.edng{background:var(--card);color:var(--ink-soft);border:1px solid var(--line)}
 .stock-line .bx{color:var(--shu)}
 .stock-empty{padding:14px 4px 8px;font-size:.8rem;color:var(--ink-soft)}
 
@@ -428,6 +433,7 @@ function stockGroups(){
 }
 let chooseMode = null;
 let orgSel = {};
+let editSi = null;
 function renderStockPanel(){
   if(!STOCK.length){
     stockPanel.innerHTML = '<div class="stock-empty">まだ空です。名前を開いて「＋ 次期役員に追加」で選ぶとここに溜まります。</div>';
@@ -447,7 +453,9 @@ function renderStockPanel(){
   stockPanel.innerHTML = stockGroups().map(([org, entries]) =>
     '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
     entries.map(([e, si]) =>
-      '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
+      si === editSi
+      ? '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '"></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
+      : '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="ed" data-si="' + si + '" aria-label="名前を修正">✎</button><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
   ).join('') + actions;
 }
@@ -638,8 +646,29 @@ stockPanel.addEventListener('click', e => {
     if(mode === 'ballot') printBallots(groups); else printStock(groups);
     return;
   }
+  const ed = e.target.closest('.ed');
+  if(ed){ editSi = +ed.dataset.si; renderStockPanel(); const inp = stockPanel.querySelector('.nmedit'); if(inp){ inp.focus(); inp.select(); } return; }
+  if(e.target.closest('.edng')){ editSi = null; renderStockPanel(); return; }
+  const ok = e.target.closest('.edok');
+  if(ok){ saveNameEdit(+ok.dataset.si); return; }
   const bx = e.target.closest('.bx');
-  if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
+  if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); editSi = null; refreshStockUI(); }
+});
+function saveNameEdit(si){
+  const inp = stockPanel.querySelector('.nmedit');
+  if(inp){
+    const v = inp.value.trim();
+    if(v) STOCK[si].name = v.replace(/ /g, '　');
+  }
+  editSi = null;
+  saveStock();
+  refreshStockUI();
+}
+stockPanel.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.classList.contains('nmedit')){
+    e.preventDefault();
+    saveNameEdit(+e.target.dataset.si);
+  }
 });
 
 listEl.addEventListener('click', e => {
