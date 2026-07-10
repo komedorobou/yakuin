@@ -208,7 +208,7 @@ input[type=search]:focus-visible{outline:none}
 
 /* PDF出力（印刷シート） */
 .stock-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:12px}
-#ballotBtn,#copyBtn{font-family:var(--sans);font-size:.8rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
+#ballotBtn{font-family:var(--sans);font-size:.8rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
 #pdfBtn{font-family:var(--sans);font-size:.8rem;color:#fff;background:var(--indigo);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
 #printSheet{display:none;background:#fff;color:#000;font-family:var(--sans)}
 #printSheet h1{font-family:var(--mincho);font-size:16pt;letter-spacing:.15em;margin-bottom:2mm}
@@ -424,7 +424,7 @@ function renderStockPanel(){
     entries.map(([e, si]) =>
       '<div class="stock-line"><span>' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
-  ).join('') + '<div class="stock-actions"><button id="copyBtn">文字コピー</button><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
+  ).join('') + '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
 }
 
 function toKanji(n){
@@ -465,24 +465,23 @@ async function makeJPDF(format){
   pdf.setFont('ipaexg');
   return pdf;
 }
-async function deliverPDF(pdf, fname, title, btn, label){
-  const blob = pdf.output('blob');
+async function deliverFiles(items, title){
   if(navigator.canShare){
-    const file = new File([blob], fname, {type: 'application/pdf'});
-    if(navigator.canShare({files: [file]})){
+    const files = items.map(x => new File([x.pdf.output('blob')], x.fname, {type: 'application/pdf'}));
+    if(navigator.canShare({files})){
       try{
-        await navigator.share({files: [file], title});
+        await navigator.share({files, title});
         return;
       }catch(shareErr){
         if(shareErr.name === 'AbortError') return;
       }
     }
   }
-  pdf.save(fname);
+  items.forEach((x, i) => setTimeout(() => x.pdf.save(x.fname), i * 400));
 }
-function stampName(base){
+function stampName(base, org){
   const d = new Date();
-  return base + '_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
+  return base + (org ? '_' + org : '') + '_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
 }
 async function printStock(){
   const btn = document.getElementById('pdfBtn');
@@ -492,25 +491,21 @@ async function printStock(){
   }
   if(btn){ btn.disabled = true; btn.textContent = '作成中…'; }
   try{
-    const pdf = await makeJPDF('a4');
     const d = new Date();
     const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
-    pdf.setFontSize(16);
-    pdf.text('次期役員（案）', 14, 18);
-    pdf.setFontSize(9);
-    pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
-    let y = 26;
+    const items = [];
     for(const [org, entries] of stockGroups()){
-      if(y > 250){ pdf.addPage(); y = 20; }
-      pdf.setFontSize(12);
-      pdf.text('■ ' + org, 14, y);
-      y += 3;
+      const pdf = await makeJPDF('a4');
+      pdf.setFontSize(16);
+      pdf.text('次期役員（案）　' + org, 14, 18);
+      pdf.setFontSize(9);
+      pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
       const body = entries.map(([e]) => {
         const p = PEOPLE[e.i];
         return [e.role, e.name, p.w || p.b, careerText(p)];
       });
       pdf.autoTable({
-        startY: y,
+        startY: 26,
         head: [['役職', '名前', '職場', '経歴']],
         body,
         styles: {font: 'ipaexg', fontStyle: 'normal', fontSize: 9.5, cellPadding: 1.8, lineColor: [60,60,60], lineWidth: 0.25, textColor: [0,0,0]},
@@ -519,40 +514,15 @@ async function printStock(){
         margin: {left: 14, right: 14},
         theme: 'grid'
       });
-      y = pdf.lastAutoTable.finalY + 10;
+      items.push({pdf, fname: stampName('次期役員案', org)});
     }
-    await deliverPDF(pdf, stampName('次期役員案'), '次期役員（案）', btn);
+    await deliverFiles(items, '次期役員（案）');
     btnMsg(btn, 'できた');
   }catch(err){
     btnMsg(btn, '失敗: ' + (err.message || err).toString().slice(0, 40));
   }finally{
     if(btn) btn.disabled = false;
   }
-}
-
-// ---- 文字コピー ----
-async function copyStock(){
-  const d = new Date();
-  const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
-  let text = '次期役員（案）\t' + dateStr + '\n組織\t役職\t名前\t職場\t経歴\n';
-  for(const [org, entries] of stockGroups()){
-    for(const [e] of entries){
-      const p = PEOPLE[e.i];
-      text += org + '\t' + e.role + '\t' + e.name + '\t' + (p.w || p.b) + '\t' + careerText(p) + '\n';
-    }
-  }
-  const btn = document.getElementById('copyBtn');
-  try{
-    await navigator.clipboard.writeText(text);
-  }catch(err){
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-  }
-  if(btn){ btn.textContent = 'コピーした'; setTimeout(() => { btn.textContent = '文字コピー'; }, 2500); }
 }
 
 // ---- 投票用紙PDF ----
@@ -596,31 +566,16 @@ async function printBallots(){
   if(btn){ btn.disabled = true; btn.textContent = '作成中…'; }
   ps.classList.add('capture', 'ballot');
   try{
-    const groups = stockGroups();
-    const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: [182, 257]});
-    for(let gi = 0; gi < groups.length; gi++){
-      const [org, entries] = groups[gi];
+    const items = [];
+    for(const [org, entries] of stockGroups()){
       ps.innerHTML = ballotHTML(org, entries);
       const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
-      if(gi > 0) pdf.addPage([182, 257], 'p');
+      const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: [182, 257]});
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 182, canvas.height * 182 / canvas.width);
+      items.push({pdf, fname: stampName('投票用紙', org)});
     }
-    const d = new Date();
-    const fname = '投票用紙_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
-    const blob = pdf.output('blob');
-    if(navigator.canShare){
-      const file = new File([blob], fname, {type: 'application/pdf'});
-      if(navigator.canShare({files: [file]})){
-        try{
-          await navigator.share({files: [file], title: '投票用紙'});
-          if(btn){ btn.disabled = false; btn.textContent = '投票用紙PDF'; }
-          return;
-        }catch(shareErr){
-          if(shareErr.name === 'AbortError'){ if(btn){ btn.disabled = false; btn.textContent = '投票用紙PDF'; } return; }
-        }
-      }
-    }
-    pdf.save(fname);
+    await deliverFiles(items, '投票用紙');
+    if(btn){ btn.disabled = false; btn.textContent = '投票用紙PDF'; }
   }catch(err){
     if(btn) btn.textContent = '失敗: ' + (err.message || err).toString().slice(0, 40);
     setTimeout(() => { if(btn) btn.textContent = '投票用紙PDF'; }, 4000);
@@ -638,7 +593,6 @@ stockBtn.addEventListener('click', () => {
 stockPanel.addEventListener('click', e => {
   if(e.target.closest('#pdfBtn')){ printStock(); return; }
   if(e.target.closest('#ballotBtn')){ printBallots(); return; }
-  if(e.target.closest('#copyBtn')){ copyStock(); return; }
   const bx = e.target.closest('.bx');
   if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
 });
