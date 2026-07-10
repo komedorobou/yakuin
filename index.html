@@ -514,10 +514,10 @@ function refreshStockUI(){
   stockBtn.classList.toggle('has', STOCK.length > 0);
   renderStockPanel();
 }
-const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'会計監査':5,'特別執行委員':6,'部長':0,'副部長':1,'常任幹事':4};
+const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'特別執行委員':5,'会計監査':6,'部長':0,'副部長':1,'常任幹事':4};
 // 2027年度 役員定数（告示第1号 2026.6.15）
 const TEISU = {
-  '中央':      {'執行委員長':1,'副執行委員長':4,'書記長':1,'書記次長':2,'執行委員':6,'会計監査':2,'特別執行委員':1},
+  '中央':      {'執行委員長':1,'副執行委員長':4,'書記長':1,'書記次長':2,'執行委員':6,'特別執行委員':1,'会計監査':2},
   '本庁支部':  {'執行委員長':1,'副執行委員長':2,'書記長':1,'書記次長':1,'執行委員':11,'会計監査':2},
   '水道支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':3,'会計監査':2},
   '現業支部':  {'執行委員長':1,'副執行委員長':1,'書記長':1,'書記次長':1,'執行委員':4,'会計監査':2},
@@ -882,7 +882,7 @@ listEl.addEventListener('click', e => {
   if(oc){
     const box = oc.closest('.next-box');
     const org = oc.dataset.org;
-    const roles = org === '青年部' ? SEINEN_ROLES : org === '中央' ? ROLES.concat('特別執行委員') : ROLES;
+    const roles = org === '青年部' ? SEINEN_ROLES : org === '中央' ? ['執行委員長','副執行委員長','書記長','書記次長','執行委員','特別執行委員','会計監査'] : ROLES;
     box.innerHTML = '<span class="pick-label">' + esc(org) + '：</span>' +
       roles.map(r => '<button class="chip role-chip" data-org="' + esc(org) + '" data-role="' + esc(r) + '">' + esc(r) + '</button>').join('') +
       '<button class="chip cancel">やめる</button>';
