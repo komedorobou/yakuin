@@ -207,7 +207,7 @@ input[type=search]:focus-visible{outline:none}
 
 /* PDF出力（印刷シート） */
 .stock-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:12px}
-#ballotBtn{font-family:var(--sans);font-size:.8rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
+#ballotBtn,#copyBtn{font-family:var(--sans);font-size:.8rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
 #pdfBtn{font-family:var(--sans);font-size:.8rem;color:#fff;background:var(--indigo);border:1px solid var(--indigo);border-radius:4px;padding:6px 16px;cursor:pointer;letter-spacing:.1em}
 #printSheet{display:none;background:#fff;color:#000;font-family:var(--sans)}
 #printSheet h1{font-family:var(--mincho);font-size:16pt;letter-spacing:.15em;margin-bottom:2mm}
@@ -423,12 +423,22 @@ function renderStockPanel(){
     entries.map(([e, si]) =>
       '<div class="stock-line"><span>' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
-  ).join('') + '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
+  ).join('') + '<div class="stock-actions"><button id="copyBtn">文字コピー</button><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
 }
 
+function toKanji(n){
+  if(typeof n !== 'number') return String(n);
+  const K = ['','一','二','三','四','五','六','七','八','九'];
+  if(n < 10) return K[n];
+  const tens = Math.floor(n / 10), ones = n % 10;
+  return (tens > 1 ? K[tens] : '') + '十' + K[ones];
+}
 function careerText(p){
-  const parts = p.roles.map(r => r.g + ' ' + r.r + ' ' + r.t + '期');
-  return parts.join('、') + (parts.length ? '（通算' + p.total + '期）' : '役員歴なし');
+  if(!p.roles.length) return '役員歴なし';
+  return p.roles.map(r => {
+    const org = r.g === '中央執行部' ? '中央' : r.g;
+    return org + r.r + toKanji(r.t) + '期';
+  }).join('　');
 }
 function buildSheet(){
   const d = new Date();
@@ -493,6 +503,31 @@ async function printStock(){
   }finally{
     ps.classList.remove('capture');
   }
+}
+
+// ---- 文字コピー ----
+async function copyStock(){
+  const d = new Date();
+  const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
+  let text = '次期役員（案）\t' + dateStr + '\n組織\t役職\t名前\t職場\t経歴\n';
+  for(const [org, entries] of stockGroups()){
+    for(const [e] of entries){
+      const p = PEOPLE[e.i];
+      text += org + '\t' + e.role + '\t' + e.name + '\t' + (p.w || p.b) + '\t' + careerText(p) + '\n';
+    }
+  }
+  const btn = document.getElementById('copyBtn');
+  try{
+    await navigator.clipboard.writeText(text);
+  }catch(err){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  if(btn){ btn.textContent = 'コピーした'; setTimeout(() => { btn.textContent = '文字コピー'; }, 2500); }
 }
 
 // ---- 投票用紙PDF ----
@@ -578,6 +613,7 @@ stockBtn.addEventListener('click', () => {
 stockPanel.addEventListener('click', e => {
   if(e.target.closest('#pdfBtn')){ printStock(); return; }
   if(e.target.closest('#ballotBtn')){ printBallots(); return; }
+  if(e.target.closest('#copyBtn')){ copyStock(); return; }
   const bx = e.target.closest('.bx');
   if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
 });
