@@ -180,6 +180,24 @@ input[type=search]:focus-visible{outline:none}
 }
 .memo::before{content:"備考　";color:var(--indigo);letter-spacing:.1em}
 
+/* 次期役員 */
+.next-box{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pick-label{font-size:.75rem;color:var(--ink-soft);letter-spacing:.08em}
+.next-btn,.chip{font-family:var(--sans);font-size:.8rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:4px 10px;cursor:pointer}
+.next-btn{border-style:dashed}
+.chip:hover,.next-btn:hover{background:var(--indigo);color:#fff}
+.chip.cancel{color:var(--ink-soft);border-color:var(--line)}
+.next-badge{display:inline-flex;align-items:center;gap:4px;background:var(--indigo);color:#fff;font-size:.75rem;border-radius:4px;padding:3px 6px 3px 9px;letter-spacing:.05em}
+.bx{background:none;border:0;color:inherit;cursor:pointer;font-size:.95rem;line-height:1;padding:0 2px}
+.countbar{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 0}
+.countbar .count{padding:0}
+#stockBtn{font-family:var(--sans);font-size:.75rem;color:var(--indigo);background:none;border:1px solid var(--indigo);border-radius:4px;padding:3px 10px;cursor:pointer;letter-spacing:.05em}
+#stockBtn.has{background:var(--indigo);color:#fff}
+.stock-panel{background:var(--card);border:2px solid var(--indigo);border-radius:8px;padding:6px 16px 16px;margin-bottom:12px}
+.stock-line{display:flex;justify-content:space-between;align-items:center;padding:4px 0 4px 11px;font-size:.92rem;border-bottom:1px dotted var(--line)}
+.stock-line .bx{color:var(--shu)}
+.stock-empty{padding:14px 4px 8px;font-size:.8rem;color:var(--ink-soft)}
+
 .empty{
   padding:48px 20px;
   text-align:center;
@@ -218,8 +236,10 @@ footer{
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
     <input type="search" id="q" placeholder="名前（漢字・ひらがな）" autocomplete="off" autofocus>
   </div>
-  <div class="count" id="count"></div>
+  <div class="countbar"><div class="count" id="count"></div><button id="stockBtn">次期役員（0）</button></div>
 </div>
+
+<div id="stockPanel" class="stock-panel" hidden></div>
 
 <div id="list"></div>
 
@@ -257,7 +277,7 @@ function highlight(name, q){
   return esc(name.slice(0,i)) + '<mark>' + esc(name.slice(i, i+q.length)) + '</mark>' + esc(name.slice(i+q.length));
 }
 
-function detailHTML(p){
+function detailHTML(p, i){
   const orgs = [];
   let cur = null;
   for(const r of p.roles){
@@ -274,6 +294,7 @@ function detailHTML(p){
   }
   h += '<div class="total-line"><span>通算</span><span class="t">' + p.total + ' 期</span></div>';
   if(p.memo) h += '<div class="memo">' + esc(p.memo) + '</div>';
+  h += nextHTML(p, i);
   return h;
 }
 
@@ -288,26 +309,113 @@ function render(){
   const autoOpen = hits.length === 1;
   listEl.innerHTML = hits.map((p, i) => {
     const disp = p.s + '　' + p.m;
-    return '<div class="row' + (autoOpen ? ' open' : '') + '" data-i="' + PEOPLE.indexOf(p) + '">' +
+    const pi = PEOPLE.indexOf(p);
+    return '<div class="row' + (autoOpen ? ' open' : '') + '" data-i="' + pi + '">' +
       '<button class="row-head" aria-expanded="' + autoOpen + '">' +
         '<span class="kana">' + esc(p.k) + '</span>' +
         '<span class="name">' + highlight(disp, q) + '</span>' +
         '<span class="shibu">' + esc(p.b) + '</span>' +
         '<span class="terms"><b>' + p.total + '</b> 期</span>' +
       '</button>' +
-      '<div class="detail">' + (autoOpen ? detailHTML(p) : '') + '</div>' +
+      '<div class="detail">' + (autoOpen ? detailHTML(p, pi) : '') + '</div>' +
     '</div>';
   }).join('');
 }
 
+// ---- 次期役員ストック ----
+const stockBtn = document.getElementById('stockBtn');
+const stockPanel = document.getElementById('stockPanel');
+const ROLES = ['執行委員長','副執行委員長','書記長','書記次長','執行委員','会計監査'];
+const SEINEN_ROLES = ['部長','副部長','書記長','書記次長','常任幹事'];
+let STOCK = [];
+try{ STOCK = JSON.parse(localStorage.getItem('yakuin_jiki') || '[]'); }catch(err){}
+function saveStock(){ localStorage.setItem('yakuin_jiki', JSON.stringify(STOCK)); }
+
+function orgOptions(p){ return ['中央', p.b === '関連評' ? '関連評' : p.b + '支部', '青年部']; }
+
+function nextHTML(p, i){
+  let h = '<div class="next-box" data-i="' + i + '">';
+  STOCK.forEach((e, si) => {
+    if(e.i === i) h += '<span class="next-badge">次期 ' + esc(e.org) + '・' + esc(e.role) + '<button class="bx" data-si="' + si + '" aria-label="取消">×</button></span>';
+  });
+  h += '<button class="next-btn">＋ 次期役員に追加</button></div>';
+  return h;
+}
+
+function redrawDetail(row){
+  row.querySelector('.detail').innerHTML = detailHTML(PEOPLE[+row.dataset.i], +row.dataset.i);
+}
+function refreshStockUI(){
+  document.querySelectorAll('#list .row.open').forEach(redrawDetail);
+  stockBtn.textContent = '次期役員（' + STOCK.length + '）';
+  stockBtn.classList.toggle('has', STOCK.length > 0);
+  renderStockPanel();
+}
+function renderStockPanel(){
+  if(!STOCK.length){
+    stockPanel.innerHTML = '<div class="stock-empty">まだ空です。名前を開いて「＋ 次期役員に追加」で選ぶとここに溜まります。</div>';
+    return;
+  }
+  const order = o => o === '中央' ? 0 : o === '青年部' ? 2 : 1;
+  const orgs = [...new Set(STOCK.map(e => e.org))].sort((a,b) => order(a) - order(b));
+  stockPanel.innerHTML = orgs.map(org =>
+    '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
+    STOCK.map((e, si) => [e, si]).filter(([e]) => e.org === org).map(([e, si]) =>
+      '<div class="stock-line"><span>' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
+    ).join('') + '</div>'
+  ).join('');
+}
+stockBtn.addEventListener('click', () => {
+  stockPanel.hidden = !stockPanel.hidden;
+  renderStockPanel();
+});
+stockPanel.addEventListener('click', e => {
+  const bx = e.target.closest('.bx');
+  if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
+});
+
 listEl.addEventListener('click', e => {
+  const bx = e.target.closest('.bx');
+  if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); return; }
+  const nb = e.target.closest('.next-btn');
+  if(nb){
+    const box = nb.closest('.next-box');
+    const p = PEOPLE[+box.dataset.i];
+    nb.outerHTML = '<span class="pick-label">どこの役？</span>' +
+      orgOptions(p).map(o => '<button class="chip org-chip" data-org="' + esc(o) + '">' + esc(o) + '</button>').join('') +
+      '<button class="chip cancel">やめる</button>';
+    return;
+  }
+  if(e.target.closest('.cancel')){ redrawDetail(e.target.closest('.row')); return; }
+  const oc = e.target.closest('.org-chip');
+  if(oc){
+    const box = oc.closest('.next-box');
+    const org = oc.dataset.org;
+    const roles = org === '青年部' ? SEINEN_ROLES : ROLES;
+    box.innerHTML = '<span class="pick-label">' + esc(org) + '：</span>' +
+      roles.map(r => '<button class="chip role-chip" data-org="' + esc(org) + '" data-role="' + esc(r) + '">' + esc(r) + '</button>').join('') +
+      '<button class="chip cancel">やめる</button>';
+    return;
+  }
+  const rc = e.target.closest('.role-chip');
+  if(rc){
+    const box = rc.closest('.next-box');
+    const i = +box.dataset.i;
+    const p = PEOPLE[i];
+    if(!STOCK.some(x => x.i === i && x.org === rc.dataset.org && x.role === rc.dataset.role)){
+      STOCK.push({i, name: p.s + '　' + p.m, b: p.b, org: rc.dataset.org, role: rc.dataset.role});
+      saveStock();
+    }
+    refreshStockUI();
+    return;
+  }
   const head = e.target.closest('.row-head');
   if(!head) return;
   const row = head.parentElement;
   const opening = !row.classList.contains('open');
   if(opening){
     const detail = row.querySelector('.detail');
-    if(!detail.innerHTML) detail.innerHTML = detailHTML(PEOPLE[+row.dataset.i]);
+    if(!detail.innerHTML) detail.innerHTML = detailHTML(PEOPLE[+row.dataset.i], +row.dataset.i);
   }
   row.classList.toggle('open', opening);
   head.setAttribute('aria-expanded', opening);
@@ -315,6 +423,7 @@ listEl.addEventListener('click', e => {
 
 qEl.addEventListener('input', render);
 render();
+refreshStockUI();
 </script>
 </body>
 </html>
