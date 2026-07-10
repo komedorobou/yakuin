@@ -216,7 +216,8 @@ input[type=search]:focus-visible{outline:none}
 #goBtn{background:var(--indigo);color:#fff;font-weight:700}
 #cancelSel{color:var(--ink-soft);border-color:var(--line)}
 .ed{background:none;border:0;color:var(--indigo);cursor:pointer;font-size:1rem;padding:0 6px;flex:none}
-.nmedit{font:inherit;font-size:.95rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;width:11em;max-width:60%}
+.nmedit,.wkedit{font:inherit;font-size:.9rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;width:9em;max-width:44%}
+.stock-line.edit .lbl{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .edok,.edng{font-family:var(--sans);font-size:.72rem;border-radius:4px;padding:3px 10px;cursor:pointer;flex:none}
 .edok{background:var(--indigo);color:#fff;border:1px solid var(--indigo)}
 .edng{background:var(--card);color:var(--ink-soft);border:1px solid var(--line)}
@@ -442,6 +443,11 @@ const PID_ALIAS = {
 };
 const JFOLD = {'﨑':'崎','嵜':'崎','髙':'高','濵':'浜','濱':'浜','邊':'辺','邉':'辺','齋':'斎','齊':'斎','斉':'斎','瀨':'瀬','栁':'柳','德':'徳','眞':'真','冨':'富','桒':'桑','藪':'薮','籔':'薮','淺':'浅','澤':'沢','薗':'園','嶌':'島','嶋':'島','曻':'昇'};
 function jfold(s){ return [...s].map(c => JFOLD[c] || c).join(''); }
+function workOf(e){
+  if(e.w) return e.w;
+  const p = findPerson(e);
+  return p ? (p.w || p.b) : e.b;
+}
 function findPerson(e){
   if(!e.pid) return null;
   const pid = PID_ALIAS[e.pid] || e.pid;
@@ -526,8 +532,8 @@ function renderStockPanel(){
     '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
     entries.map(([e, si]) =>
       si === editSi
-      ? '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '"></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
-      : (() => { const pp = findPerson(e); return '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(pp ? (pp.w || pp.b) : e.b) + '）</span><button class="ed" data-si="' + si + '" aria-label="名前を修正">✎</button><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'; })()
+      ? '<div class="stock-line edit"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '" placeholder="名前">　<input class="wkedit" data-si="' + si + '" value="' + esc(workOf(e)) + '" placeholder="職場"></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
+      : '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(workOf(e)) + '）</span><button class="ed" data-si="' + si + '" aria-label="修正">✎</button><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
   ).join('') + actions;
 }
@@ -607,7 +613,7 @@ async function printStock(groups){
       pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
       const body = entries.map(([e]) => {
         const p = findPerson(e);
-        return [e.role, e.name, p ? (p.w || p.b) : e.b, p ? careerText(p) : ''];
+        return [e.role, e.name, workOf(e), p ? careerText(p) : ''];
       });
       pdf.autoTable({
         startY: 26,
@@ -642,8 +648,7 @@ function ballotHTML(org, entries){
   let rows = '';
   let prevRole = null;
   for(const [e] of entries){
-    const p = findPerson(e);
-    const work = p ? (p.w || p.b) : e.b;
+    const work = workOf(e);
     const roleCell = (e.role === prevRole) ? '<span class="jone">同</span>' : jchars(e.role);
     prevRole = e.role;
     rows += '<tr><td class="cRole">' + roleCell + '</td>' +
@@ -756,7 +761,7 @@ function showPreview(){
         '<h2>' + esc(org) + '</h2><table><tr><th>役職</th><th>名前</th><th>職場</th><th>経歴</th></tr>' +
         entries.map(([e]) => {
           const p = findPerson(e);
-          return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(p ? (p.w || p.b) : e.b) + '</td><td>' + esc(p ? careerText(p) : '') + '</td></tr>';
+          return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(workOf(e)) + '</td><td>' + esc(p ? careerText(p) : '') + '</td></tr>';
         }).join('') + '</table>'
       ).join('') + '</div>';
   }
@@ -770,14 +775,22 @@ function saveNameEdit(si){
   const inp = stockPanel.querySelector('.nmedit');
   if(inp){
     const v = inp.value.trim();
-    if(v){ STOCK[si].name = v.replace(/ /g, '　'); STOCK[si].ed = 1; }
+    if(v && v.replace(/ /g, '　') !== STOCK[si].name){ STOCK[si].name = v.replace(/ /g, '　'); STOCK[si].ed = 1; }
+  }
+  const wk = stockPanel.querySelector('.wkedit');
+  if(wk){
+    const v = wk.value.trim();
+    const e = STOCK[si];
+    const p = findPerson(e);
+    const def = p ? (p.w || p.b) : e.b;
+    if(!v || v === def) delete e.w; else e.w = v;
   }
   editSi = null;
   saveStock();
   refreshStockUI();
 }
 stockPanel.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && e.target.classList.contains('nmedit')){
+  if(e.key === 'Enter' && (e.target.classList.contains('nmedit') || e.target.classList.contains('wkedit'))){
     e.preventDefault();
     saveNameEdit(+e.target.dataset.si);
   }
