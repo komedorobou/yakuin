@@ -202,7 +202,13 @@ input[type=search]:focus-visible{outline:none}
 #stockBtn{font-family:var(--sans);font-size:.75rem;color:var(--indigo);background:none;border:1px solid var(--indigo);border-radius:4px;padding:3px 10px;cursor:pointer;letter-spacing:.05em}
 #stockBtn.has{background:var(--indigo);color:#fff}
 .stock-panel{background:var(--card);border:2px solid var(--indigo);border-radius:8px;padding:6px 16px 16px;margin-bottom:12px}
-.stock-line{display:flex;justify-content:space-between;align-items:center;padding:4px 0 4px 11px;font-size:.92rem;border-bottom:1px dotted var(--line)}
+.stock-line{display:flex;align-items:center;gap:8px;padding:4px 0 4px 4px;font-size:.92rem;border-bottom:1px dotted var(--line)}
+.stock-line .lbl{flex:1;min-width:0}
+.selc{flex:none;width:22px;height:22px;border:2px solid var(--indigo);border-radius:50%;background:var(--card);cursor:pointer;color:transparent;font-size:.85rem;line-height:1;padding:0}
+.selc.on{background:var(--indigo);color:#fff}
+.sel-tools{display:flex;gap:8px;align-items:center;padding:12px 0 4px}
+.sel-tools .cnt{font-size:.72rem;color:var(--ink-soft);margin-left:auto}
+.sel-tools button{font-family:var(--sans);font-size:.75rem;color:var(--indigo);background:var(--card);border:1px solid var(--indigo);border-radius:4px;padding:3px 12px;cursor:pointer}
 .stock-line .bx{color:var(--shu)}
 .stock-empty{padding:14px 4px 8px;font-size:.8rem;color:var(--ink-soft)}
 
@@ -409,6 +415,11 @@ function refreshStockUI(){
 }
 const ROLE_ORDER = {'執行委員長':0,'副執行委員長':1,'書記長':2,'書記次長':3,'執行委員':4,'会計監査':5,'部長':0,'副部長':1,'常任幹事':4};
 function orgOrder(o){ return o === '中央' ? 0 : o === '青年部' ? 2 : 1; }
+function selectedGroups(){
+  return stockGroups()
+    .map(([org, entries]) => [org, entries.filter(([e]) => e.sel !== false)])
+    .filter(([org, entries]) => entries.length);
+}
 function stockGroups(){
   const orgs = [...new Set(STOCK.map(e => e.org))].sort((a,b) => orgOrder(a) - orgOrder(b));
   return orgs.map(org => [org, STOCK.map((e, si) => [e, si]).filter(([e]) => e.org === org)
@@ -419,10 +430,12 @@ function renderStockPanel(){
     stockPanel.innerHTML = '<div class="stock-empty">まだ空です。名前を開いて「＋ 次期役員に追加」で選ぶとここに溜まります。</div>';
     return;
   }
-  stockPanel.innerHTML = stockGroups().map(([org, entries]) =>
+  const selCount = STOCK.filter(e => e.sel !== false).length;
+  stockPanel.innerHTML = '<div class="sel-tools"><button id="selAll">全部</button><button id="selNone">全部解除</button><span class="cnt">' + selCount + '/' + STOCK.length + ' 選択中</span></div>' +
+  stockGroups().map(([org, entries]) =>
     '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
     entries.map(([e, si]) =>
-      '<div class="stock-line"><span>' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
+      '<div class="stock-line"><button class="selc' + (e.sel !== false ? ' on' : '') + '" data-si="' + si + '" aria-label="選択">✓</button><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(e.b) + '）</span><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
   ).join('') + '<div class="stock-actions"><button id="ballotBtn">投票用紙PDF</button><button id="pdfBtn">PDFにする</button></div>';
 }
@@ -494,7 +507,9 @@ async function printStock(){
     const d = new Date();
     const dateStr = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
     const items = [];
-    for(const [org, entries] of stockGroups()){
+    const selGroups = selectedGroups();
+    if(!selGroups.length){ btnMsg(btn, '選択が0人。○にチェックを'); return; }
+    for(const [org, entries] of selGroups){
       const pdf = await makeJPDF('a4');
       pdf.setFontSize(16);
       pdf.text('次期役員（案）　' + org, 14, 18);
@@ -567,7 +582,9 @@ async function printBallots(){
   ps.classList.add('capture', 'ballot');
   try{
     const items = [];
-    for(const [org, entries] of stockGroups()){
+    const selGroups2 = selectedGroups();
+    if(!selGroups2.length){ if(btn){ btn.textContent = '選択が0人。○にチェックを'; setTimeout(() => { btn.disabled = false; btn.textContent = '投票用紙PDF'; }, 3000); } return; }
+    for(const [org, entries] of selGroups2){
       ps.innerHTML = ballotHTML(org, entries);
       const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
       const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: [182, 257]});
@@ -593,6 +610,10 @@ stockBtn.addEventListener('click', () => {
 stockPanel.addEventListener('click', e => {
   if(e.target.closest('#pdfBtn')){ printStock(); return; }
   if(e.target.closest('#ballotBtn')){ printBallots(); return; }
+  if(e.target.closest('#selAll')){ STOCK.forEach(x => x.sel = true); saveStock(); renderStockPanel(); return; }
+  if(e.target.closest('#selNone')){ STOCK.forEach(x => x.sel = false); saveStock(); renderStockPanel(); return; }
+  const sc = e.target.closest('.selc');
+  if(sc){ const x = STOCK[+sc.dataset.si]; x.sel = (x.sel === false); saveStock(); renderStockPanel(); return; }
   const bx = e.target.closest('.bx');
   if(bx){ STOCK.splice(+bx.dataset.si, 1); saveStock(); refreshStockUI(); }
 });
