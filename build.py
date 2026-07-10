@@ -29,7 +29,7 @@ for i in range(4, len(r2)):
         break
     roles.append((i, groups[i], name))
 LAST = roles[-1][0]
-TOTAL, ACT, MEMO = LAST + 9, LAST + 10, LAST + 11  # 集計8列の後: 通算総数, 2026現役, 備考
+TOTAL, MEMO = LAST + 9, LAST + 11  # 集計8列の後: 通算総数, (2026現役), 備考
 
 people = []
 for row in ws.iter_rows(min_row=3, values_only=True):
@@ -48,7 +48,7 @@ for row in ws.iter_rows(min_row=3, values_only=True):
         'k': str(row[0] or ''), 's': str(row[1]).strip(), 'm': str(row[2] or '').strip(),
         'b': str(row[3] or ''), 'roles': rl,
         'total': int(row[TOTAL] or 0),
-        'act': bool(row[ACT]), 'memo': str(row[MEMO] or ''),
+        'memo': str(row[MEMO] or ''),
     })
 
 data = json.dumps(people, ensure_ascii=False, separators=(',', ':'))
