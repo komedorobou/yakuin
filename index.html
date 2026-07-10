@@ -623,8 +623,10 @@ async function printBallots(groups){
     for(const [org, entries] of groups){
       ps.innerHTML = ballotHTML(org, entries);
       const canvas = await html2canvas(ps, {scale: 2, backgroundColor: '#ffffff'});
-      const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: [182, 257]});
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 182, canvas.height * 182 / canvas.width);
+      const pdf = new jspdf.jsPDF({orientation: 'p', unit: 'mm', format: 'a4'});
+      let w = 210, hh = canvas.height * 210 / canvas.width;
+      if(hh > 297){ hh = 297; w = canvas.width * 297 / canvas.height; }
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 0, w, hh);
       items.push({pdf, fname: stampName('投票用紙', org)});
     }
     await deliverFiles(items, '投票用紙');
