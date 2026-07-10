@@ -424,20 +424,48 @@ let STOCK = [];
 try{ STOCK = JSON.parse(localStorage.getItem('yakuin_jiki') || '[]'); }catch(err){}
 function saveStock(){ localStorage.setItem('yakuin_jiki', JSON.stringify(STOCK)); }
 function personKey(p){ return p.s + '｜' + p.m; }
+// 名簿修正で漢字が変わった人の読み替え表
+const PID_ALIAS = {
+  '吉川｜朋子': '吉川｜明子',
+  '久瀧｜警唯': '久瀧｜誓唯',
+  '春崎｜孝雄': '春﨑｜孝雄',
+  '高﨑｜一哉': '髙﨑｜一哉',
+  '高田｜真有': '髙田｜真有',
+  '尾崎｜明美': '尾﨑｜明美',
+  '神崎｜信江': '神﨑｜信江',
+  '小柳｜瑞穂': '小栁｜瑞穂',
+  '笹島｜光弘': '笹嶋｜光弘',
+  '濵﨑｜貴美': '濵崎｜貴美',
+  '藪｜知子': '薮｜知子',
+  '吉富｜綾花': '吉冨｜綾花'
+};
+const JFOLD = {'﨑':'崎','嵜':'崎','髙':'高','濵':'浜','濱':'浜','邊':'辺','邉':'辺','齋':'斎','齊':'斎','斉':'斎','瀨':'瀬','栁':'柳','德':'徳','眞':'真','冨':'富','桒':'桑','藪':'薮','籔':'薮','淺':'浅','澤':'沢','薗':'園','嶌':'島','嶋':'島','曻':'昇'};
+function jfold(s){ return [...s].map(c => JFOLD[c] || c).join(''); }
 function findPerson(e){
-  if(e.pid){
-    const p = PEOPLE.find(x => personKey(x) === e.pid);
-    if(p) return p;
-  }
-  return null;
+  if(!e.pid) return null;
+  const pid = PID_ALIAS[e.pid] || e.pid;
+  let p = PEOPLE.find(x => personKey(x) === pid);
+  if(p) return p;
+  // 異体字ゆらぎで一致しない場合
+  const key = jfold(pid.replace('｜', ''));
+  p = PEOPLE.find(x => jfold(x.s + x.m) === key);
+  return p || null;
 }
 // 旧形式（番号i保存）からの移行: 名前で人を探し直す
 STOCK.forEach(e => {
   if(!e.pid){
     const nm = (e.name || '').replace(/[\s\u3000]/g, '');
-    const p = PEOPLE.find(x => (x.s + x.m) === nm);
+    const p = PEOPLE.find(x => (x.s + x.m) === nm) || PEOPLE.find(x => jfold(x.s + x.m) === jfold(nm));
     e.pid = p ? personKey(p) : '';
     delete e.i;
+  }
+  const p2 = findPerson(e);
+  if(p2){
+    const cur = (e.name || '').replace(/[\s\u3000]/g, '');
+    const oldKey = e.pid.replace('｜', '');
+    // 名前を手修正してなければ正しい表記に更新
+    if(cur === oldKey || jfold(cur) === jfold(p2.s + p2.m)) e.name = p2.s + '　' + p2.m;
+    e.pid = personKey(p2);
   }
 });
 saveStock();
