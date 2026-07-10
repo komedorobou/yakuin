@@ -217,6 +217,7 @@ input[type=search]:focus-visible{outline:none}
 #cancelSel{color:var(--ink-soft);border-color:var(--line)}
 .ed{background:none;border:0;color:var(--indigo);cursor:pointer;font-size:1rem;padding:0 6px;flex:none}
 .nmedit,.wkedit{font:inherit;font-size:.9rem;border:1px solid var(--indigo);border-radius:4px;padding:2px 8px;width:9em;max-width:44%}
+.credit{font:inherit;font-size:.85rem;border:1px solid var(--indigo);border-radius:4px;padding:4px 8px;width:100%;margin-top:6px;resize:vertical}
 .stock-line.edit .lbl{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .edok,.edng{font-family:var(--sans);font-size:.72rem;border-radius:4px;padding:3px 10px;cursor:pointer;flex:none}
 .edok{background:var(--indigo);color:#fff;border:1px solid var(--indigo)}
@@ -448,6 +449,11 @@ function workOf(e){
   const p = findPerson(e);
   return p ? (p.w || p.b) : e.b;
 }
+function careerOf(e){
+  if(e.c) return e.c;
+  const p = findPerson(e);
+  return p ? careerText(p) : '';
+}
 function findPerson(e){
   if(!e.pid) return null;
   const pid = PID_ALIAS[e.pid] || e.pid;
@@ -532,7 +538,7 @@ function renderStockPanel(){
     '<div class="org"><div class="org-name">' + esc(org) + '</div>' +
     entries.map(([e, si]) =>
       si === editSi
-      ? '<div class="stock-line edit"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '" placeholder="名前">　<input class="wkedit" data-si="' + si + '" value="' + esc(workOf(e)) + '" placeholder="職場"></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
+      ? '<div class="stock-line edit"><span class="lbl">' + esc(e.role) + '　<input class="nmedit" data-si="' + si + '" value="' + esc(e.name) + '" placeholder="名前">　<input class="wkedit" data-si="' + si + '" value="' + esc(workOf(e)) + '" placeholder="職場"><textarea class="credit" data-si="' + si + '" placeholder="経歴" rows="3">' + esc(careerOf(e)) + '</textarea></span><button class="edok" data-si="' + si + '">保存</button><button class="edng">やめる</button></div>'
       : '<div class="stock-line"><span class="lbl">' + esc(e.role) + '　<b>' + esc(e.name) + '</b>（' + esc(workOf(e)) + '）</span><button class="ed" data-si="' + si + '" aria-label="修正">✎</button><button class="bx" data-si="' + si + '" aria-label="取消">×</button></div>'
     ).join('') + '</div>'
   ).join('') + actions;
@@ -611,10 +617,7 @@ async function printStock(groups){
       pdf.text('次期役員（案）　' + org, 14, 18);
       pdf.setFontSize(9);
       pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
-      const body = entries.map(([e]) => {
-        const p = findPerson(e);
-        return [e.role, e.name, workOf(e), p ? careerText(p) : ''];
-      });
+      const body = entries.map(([e]) => [e.role, e.name, workOf(e), careerOf(e)]);
       pdf.autoTable({
         startY: 26,
         head: [['役職', '名前', '職場', '経歴']],
@@ -759,10 +762,9 @@ function showPreview(){
     body.innerHTML = '<div class="psheet pv-list"><h1>次期役員（案）</h1><div class="pdate">' + dateStr + '　岸和田市職労</div>' +
       groups.map(([org, entries]) =>
         '<h2>' + esc(org) + '</h2><table><tr><th>役職</th><th>名前</th><th>職場</th><th>経歴</th></tr>' +
-        entries.map(([e]) => {
-          const p = findPerson(e);
-          return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(workOf(e)) + '</td><td>' + esc(p ? careerText(p) : '') + '</td></tr>';
-        }).join('') + '</table>'
+        entries.map(([e]) =>
+          '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(workOf(e)) + '</td><td>' + esc(careerOf(e)) + '</td></tr>'
+        ).join('') + '</table>'
       ).join('') + '</div>';
   }
   document.getElementById('pvOverlay').hidden = false;
@@ -784,6 +786,14 @@ function saveNameEdit(si){
     const p = findPerson(e);
     const def = p ? (p.w || p.b) : e.b;
     if(!v || v === def) delete e.w; else e.w = v;
+  }
+  const cr = stockPanel.querySelector('.credit');
+  if(cr){
+    const v = cr.value.trim();
+    const e = STOCK[si];
+    const p = findPerson(e);
+    const def = p ? careerText(p) : '';
+    if(!v || v === def) delete e.c; else e.c = v;
   }
   editSi = null;
   saveStock();
