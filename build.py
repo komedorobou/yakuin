@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 
 import openpyxl
@@ -22,21 +23,22 @@ FOLD = str.maketrans(
 
 
 def load_members():
-    """accdbから 氏名→職場（部局所属名）の辞書を作る。読めなければ空。"""
+    """accdbから組合員リスト [(氏名, ｼﾒｲ, 支部, 職場)] を作る。読めなければ空。"""
     if not ACCDB.exists():
         print('注意: 組合員名簿accdbが見つからない。職場名なしで続行')
-        return {}
+        return []
     tmp = Path(tempfile.mkdtemp())
     out_csv = tmp / 'members.csv'
     script = tmp / 'export.ps1'
     ps = f'''$conn = New-Object System.Data.OleDb.OleDbConnection("Provider=Microsoft.ACE.OLEDB.16.0;Data Source={ACCDB}")
 $conn.Open()
 $cmd = $conn.CreateCommand()
-$cmd.CommandText = "SELECT 氏名, 部局所属名 FROM [Sheet1]"
+$cmd.CommandText = "SELECT 氏名, ｼﾒｲ, 支部名称, 部局所属名 FROM [Sheet1]"
 $r = $cmd.ExecuteReader()
 $sb = New-Object System.Text.StringBuilder
 while($r.Read()){{
-  [void]$sb.AppendLine('"' + ("$($r.GetValue(0))" -replace '"','') + '","' + ("$($r.GetValue(1))" -replace '"','') + '"')
+  $vals = 0..3 | ForEach-Object {{ ('"' + ("$($r.GetValue($_))" -replace '"','') + '"') }}
+  [void]$sb.AppendLine($vals -join ',')
 }}
 $r.Close(); $conn.Close()
 [System.IO.File]::WriteAllText("{out_csv}", $sb.ToString(), (New-Object System.Text.UTF8Encoding $true))
@@ -46,19 +48,33 @@ $r.Close(); $conn.Close()
                        capture_output=True)
     if r.returncode != 0 or not out_csv.exists():
         print('注意: accdb読み取り失敗。職場名なしで続行')
-        return {}
-    mem = {}
+        return []
+    rows = []
     with open(out_csv, encoding='utf-8-sig') as f:
         for row in csv.reader(f):
-            if not row or not row[0].strip():
-                continue
-            key = row[0].replace('　', '').replace(' ', '').translate(FOLD)
-            mem.setdefault(key, set()).add(row[1].strip())
-    # 同姓同名で職場が割れる場合は使わない
-    return {k: next(iter(v)) for k, v in mem.items() if len(v) == 1}
+            if row and row[0].strip():
+                rows.append((row[0].strip(), row[1].strip(), row[2].strip(), row[3].strip()))
+    return rows
 
 
-members = load_members()
+def to_hira(kana):
+    """半角ｶﾅ→ひらがな（濁点結合込み）"""
+    s = unicodedata.normalize('NFKC', kana).replace(' ', '').replace('　', '')
+    s = unicodedata.normalize('NFC', s)
+    return ''.join(chr(ord(c) - 0x60) if 'ァ' <= c <= 'ヶ' else c for c in s)
+
+
+def name_key(name):
+    return name.replace('　', '').replace(' ', '').translate(FOLD)
+
+
+member_rows = load_members()
+members = {}
+_tmp = {}
+for _n, _k, _b, _w in member_rows:
+    _tmp.setdefault(name_key(_n), set()).add(_w)
+# 同姓同名で職場が割れる場合は使わない
+members = {k: next(iter(v)) for k, v in _tmp.items() if len(v) == 1}
 
 wb = openpyxl.load_workbook(XLSX, data_only=True)
 ws = wb.worksheets[0]
@@ -108,6 +124,23 @@ for row in ws.iter_rows(min_row=3, values_only=True):
         'memo': str(row[MEMO] or ''),
     })
 
+# 役員歴のない現組合員も検索に出す
+xlsx_keys = {name_key(p['s'] + p['m']) for p in people}
+added = 0
+for _n, _kana, _b, _w in member_rows:
+    if name_key(_n) in xlsx_keys:
+        continue
+    parts = _n.replace('　', ' ').split()
+    s = parts[0]
+    m = ' '.join(parts[1:]) if len(parts) > 1 else ''
+    people.append({
+        'k': to_hira(_kana), 's': s, 'm': m,
+        'b': _b, 'w': _w, 'roles': [],
+        'total': 0, 'memo': '',
+    })
+    added += 1
+people.sort(key=lambda p: (p['k'] or 'ん'*10, p['s'], p['m']))
+
 data = json.dumps(people, ensure_ascii=False, separators=(',', ':'))
 html = HTML.read_text(encoding='utf-8')
 new = re.sub(
@@ -116,4 +149,4 @@ new = re.sub(
     html, count=1, flags=re.S,
 )
 HTML.write_text(new, encoding='utf-8')
-print(f'{len(people)}名を index.html に注入した（職場名あり {matched}名）')
+print(f'{len(people)}名を index.html に注入した（職場名あり {matched}名、役員歴なし組合員 {added}名追加）')
