@@ -278,7 +278,7 @@ footer{
 
 <div id="list"></div>
 
-<footer>役員歴は期数（年数）。名簿データより自動生成。</footer>
+<footer>役員歴は期数（年数）。名簿データより自動生成。 v4</footer>
 </div>
 
 <div id="printSheet"></div>
@@ -426,11 +426,19 @@ function buildSheet(){
       }).join('') + '</table>'
     ).join('');
 }
+function btnMsg(btn, msg, keep){
+  if(!btn) return;
+  btn.textContent = msg;
+  if(!keep) setTimeout(() => { btn.disabled = false; btn.textContent = 'PDFにする'; }, 4000);
+}
 async function printStock(){
   buildSheet();
-  if(!window.html2canvas || !window.jspdf){ window.print(); return; }
-  const ps = document.getElementById('printSheet');
   const btn = document.getElementById('pdfBtn');
+  if(!window.html2canvas || !window.jspdf){
+    btnMsg(btn, '部品の読込失敗。電波確認して再読込を');
+    return;
+  }
+  const ps = document.getElementById('printSheet');
   if(btn){ btn.disabled = true; btn.textContent = '作成中…'; }
   ps.classList.add('capture');
   try{
@@ -446,12 +454,27 @@ async function printStock(){
       pos += pageH; page++;
     }
     const d = new Date();
-    pdf.save('次期役員案_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf');
+    const fname = '次期役員案_' + d.getFullYear() + (d.getMonth()+101+'').slice(1) + (d.getDate()+100+'').slice(1) + '.pdf';
+    const blob = pdf.output('blob');
+    // スマホ: 共有シート優先（保存/印刷/送信を選べる）
+    if(navigator.canShare){
+      const file = new File([blob], fname, {type: 'application/pdf'});
+      if(navigator.canShare({files: [file]})){
+        try{
+          await navigator.share({files: [file], title: '次期役員（案）'});
+          btnMsg(btn, 'できた');
+          return;
+        }catch(shareErr){
+          if(shareErr.name === 'AbortError'){ btnMsg(btn, 'PDFにする'); return; }
+        }
+      }
+    }
+    pdf.save(fname);
+    btnMsg(btn, 'できた（ダウンロード）');
   }catch(err){
-    window.print();
+    btnMsg(btn, '失敗: ' + (err.message || err).toString().slice(0, 40));
   }finally{
     ps.classList.remove('capture');
-    if(btn){ btn.disabled = false; btn.textContent = 'PDFにする'; }
   }
 }
 stockBtn.addEventListener('click', () => {
