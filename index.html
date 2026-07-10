@@ -423,13 +423,31 @@ const SEINEN_ROLES = ['部長','副部長','書記長','書記次長','常任幹
 let STOCK = [];
 try{ STOCK = JSON.parse(localStorage.getItem('yakuin_jiki') || '[]'); }catch(err){}
 function saveStock(){ localStorage.setItem('yakuin_jiki', JSON.stringify(STOCK)); }
+function personKey(p){ return p.s + '｜' + p.m; }
+function findPerson(e){
+  if(e.pid){
+    const p = PEOPLE.find(x => personKey(x) === e.pid);
+    if(p) return p;
+  }
+  return null;
+}
+// 旧形式（番号i保存）からの移行: 名前で人を探し直す
+STOCK.forEach(e => {
+  if(!e.pid){
+    const nm = (e.name || '').replace(/[\s\u3000]/g, '');
+    const p = PEOPLE.find(x => (x.s + x.m) === nm);
+    e.pid = p ? personKey(p) : '';
+    delete e.i;
+  }
+});
+saveStock();
 
 function orgOptions(p){ return ['中央', p.b === '関連評' ? '関連評' : p.b + '支部', '青年部']; }
 
 function nextHTML(p, i){
   let h = '<div class="next-box" data-i="' + i + '">';
   STOCK.forEach((e, si) => {
-    if(e.i === i) h += '<span class="next-badge">次期 ' + esc(e.org) + '・' + esc(e.role) + '<button class="bx" data-si="' + si + '" aria-label="取消">×</button></span>';
+    if(e.pid === personKey(p)) h += '<span class="next-badge">次期 ' + esc(e.org) + '・' + esc(e.role) + '<button class="bx" data-si="' + si + '" aria-label="取消">×</button></span>';
   });
   h += '<button class="next-btn">＋ 次期役員に追加</button></div>';
   return h;
@@ -554,8 +572,8 @@ async function printStock(groups){
       pdf.setFontSize(9);
       pdf.text(dateStr + '　岸和田市職労', 196, 18, {align: 'right'});
       const body = entries.map(([e]) => {
-        const p = PEOPLE[e.i];
-        return [e.role, e.name, p.w || p.b, careerText(p)];
+        const p = findPerson(e);
+        return [e.role, e.name, p ? (p.w || p.b) : e.b, p ? careerText(p) : ''];
       });
       pdf.autoTable({
         startY: 26,
@@ -590,12 +608,13 @@ function ballotHTML(org, entries){
   let rows = '';
   let prevRole = null;
   for(const [e] of entries){
-    const p = PEOPLE[e.i];
+    const p = findPerson(e);
+    const work = p ? (p.w || p.b) : e.b;
     const roleCell = (e.role === prevRole) ? '<span class="jone">同</span>' : jchars(e.role);
     prevRole = e.role;
     rows += '<tr><td class="cRole">' + roleCell + '</td>' +
       '<td class="cName">' + jchars(e.name) + '</td>' +
-      '<td class="cWork">' + jchars(p.w || p.b) + '</td>' +
+      '<td class="cWork">' + jchars(work) + '</td>' +
       '<td class="cVote"></td></tr>';
   }
   return '<div class="bwrap">' +
@@ -702,8 +721,8 @@ function showPreview(){
       groups.map(([org, entries]) =>
         '<h2>' + esc(org) + '</h2><table><tr><th>役職</th><th>名前</th><th>職場</th><th>経歴</th></tr>' +
         entries.map(([e]) => {
-          const p = PEOPLE[e.i];
-          return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(p.w || p.b) + '</td><td>' + esc(careerText(p)) + '</td></tr>';
+          const p = findPerson(e);
+          return '<tr><td class="po">' + esc(e.role) + '</td><td class="pn">' + esc(e.name) + '</td><td class="pb">' + esc(p ? (p.w || p.b) : e.b) + '</td><td>' + esc(p ? careerText(p) : '') + '</td></tr>';
         }).join('') + '</table>'
       ).join('') + '</div>';
   }
@@ -756,10 +775,10 @@ listEl.addEventListener('click', e => {
   const rc = e.target.closest('.role-chip');
   if(rc){
     const box = rc.closest('.next-box');
-    const i = +box.dataset.i;
-    const p = PEOPLE[i];
-    if(!STOCK.some(x => x.i === i && x.org === rc.dataset.org && x.role === rc.dataset.role)){
-      STOCK.push({i, name: p.s + '　' + p.m, b: p.b, org: rc.dataset.org, role: rc.dataset.role});
+    const p = PEOPLE[+box.dataset.i];
+    const pid = personKey(p);
+    if(!STOCK.some(x => x.pid === pid && x.org === rc.dataset.org && x.role === rc.dataset.role)){
+      STOCK.push({pid, name: p.s + '　' + p.m, b: p.b, org: rc.dataset.org, role: rc.dataset.role});
       saveStock();
     }
     refreshStockUI();
